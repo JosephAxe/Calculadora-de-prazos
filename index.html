@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora de Prazos CPC - TJCE</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 500px; margin: auto; background-color: #f4f4f9; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #333; }
+        label { font-weight: bold; margin-top: 10px; display: block; }
+        input, select, button { width: 100%; padding: 10px; margin-top: 5px; margin-bottom: 15px; border-radius: 5px; border: 1px solid #ccc; box-sizing: border-box; font-size: 16px; }
+        button { background-color: #d32f2f; color: white; border: none; font-weight: bold; cursor: pointer; margin-bottom: 10px; }
+        button:hover { background-color: #b71c1c; }
+        .checkbox-container { display: flex; align-items: center; margin-bottom: 10px; }
+        .checkbox-container input { width: auto; margin-right: 10px; margin-bottom: 0; }
+        .checkbox-container label { margin-top: 0; font-weight: normal; }
+        #resultado { margin-top: 20px; padding: 15px; background-color: #e8f5e9; border-left: 5px solid #2e7d32; display: none; line-height: 1.6; }
+        .etapa { margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #c8e6c9; }
+        .etapa:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .data-destaque { color: #d32f2f; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>Prazos CPC em Cascata</h2>
+    
+    <label for="dataAudiencia">Data da Audiência (Marco Zero):</label>
+    <input type="date" id="dataAudiencia">
+
+    <label for="comarca">Comarca:</label>
+    <select id="comarca">
+        <option value="tjce">Apenas Feriados Estaduais (TJCE)</option>
+        <option value="sao_benedito">São Benedito</option>
+        <option value="carnaubal">Carnaubal</option>
+    </select>
+
+    <div class="checkbox-container">
+        <input type="checkbox" id="autoraFazenda">
+        <label for="autoraFazenda">Parte AUTORA é Fazenda/Defensoria (Dobro)</label>
+    </div>
+
+    <div class="checkbox-container">
+        <input type="checkbox" id="requeridaFazenda">
+        <label for="requeridaFazenda">Parte REQUERIDA é Fazenda/Defensoria (Dobro)</label>
+    </div>
+    
+    <div class="checkbox-container">
+        <input type="checkbox" id="temMP">
+        <label for="temMP">Há intervenção do Ministério Público (MP)</label>
+    </div>
+
+    <div class="checkbox-container" style="margin-bottom: 20px;">
+        <input type="checkbox" id="mostrarProvas" checked>
+        <label for="mostrarProvas">Mostrar etapa de Especificação de Provas</label>
+    </div>
+
+    <label>Calcular Prazos Sucessivos:</label>
+    <button onclick="calcularPrazo('conciliacao')">1. Cenário 1 (Conciliação)</button>
+    <button onclick="calcularPrazo('instrucao')">2. Cenário 2 (Instrução)</button>
+
+    <div id="resultado"></div>
+</div>
+
+<script>
+    const feriadosTJCE = [
+        "02-16", "02-17", "02-18", "03-19", "03-25", "04-02", "04-03", 
+        "04-21", "01-01", "05-01", "06-04", "09-07", "10-12", "10-28", 
+        "11-02", "11-20", "12-08"
+    ];
+    
+    const feriadosSaoBenedito = ["05-13", "10-04", "11-25"];
+    const feriadosCarnaubal = ["07-22", "09-08"];
+
+    function ehDiaUtil(dataObj, comarca) {
+        const diaSemana = dataObj.getDay();
+        if (diaSemana === 0 || diaSemana === 6) return false;
+
+        const mes = String(dataObj.getMonth() + 1).padStart(2, '0');
+        const dia = String(dataObj.getDate()).padStart(2, '0');
+        const mesDia = `${mes}-${dia}`;
+
+        if ((mes === "12" && parseInt(dia) >= 20) || (mes === "01" && parseInt(dia) <= 6)) {
+            return false;
+        }
+
+        let feriadosValidos = [...feriadosTJCE];
+        if (comarca === "sao_benedito") feriadosValidos = feriadosValidos.concat(feriadosSaoBenedito);
+        if (comarca === "carnaubal") feriadosValidos = feriadosValidos.concat(feriadosCarnaubal);
+
+        return !feriadosValidos.includes(mesDia);
+    }
+
+    function proximoDiaUtil(dataBase, comarca) {
+        let data = new Date(dataBase.getTime());
+        do {
+            data.setDate(data.getDate() + 1);
+        } while (!ehDiaUtil(data, comarca));
+        return data;
+    }
+
+    function somarDiasUteis(dataBase, qtdDias, comarca) {
+        let data = new Date(dataBase.getTime());
+        let diasSomados = 0;
+        
+        while (diasSomados < qtdDias) {
+            data.setDate(data.getDate() + 1);
+            if (ehDiaUtil(data, comarca)) {
+                diasSomados++;
+            }
+        }
+        return data;
+    }
+
+    function formatarData(data, destaque = false) {
+        const dias = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
+        let dataFormatada = `${data.toLocaleDateString('pt-BR')} (${dias[data.getDay()]})`;
+        if (destaque) {
+            return `<strong class="data-destaque">${dataFormatada}</strong>`;
+        }
+        return `<strong>${dataFormatada}</strong>`;
+    }
+
+    function calcularPrazo(cenario) {
+        const dataStr = document.getElementById("dataAudiencia").value;
+        const comarca = document.getElementById("comarca").value;
+        const prazoAutoraEmDobro = document.getElementById("autoraFazenda").checked;
+        const prazoRequeridaEmDobro = document.getElementById("requeridaFazenda").checked;
+        const temMP = document.getElementById("temMP").checked;
+        const mostrarProvas = document.getElementById("mostrarProvas").checked;
+        
+        if (!dataStr) {
+            alert("Por favor, preencha a data da audiência.");
+            return;
+        }
+
+        let dataAtual = new Date(dataStr + "T12:00:00Z");
+        let html = "";
+
+        if (cenario === 'conciliacao') {
+            let prazoContestacao = prazoRequeridaEmDobro ? 30 : 15;
+            let inicioContestacao = proximoDiaUtil(dataAtual, comarca);
+            let dataContestacao = somarDiasUteis(dataAtual, prazoContestacao, comarca);
+            html += `<div class="etapa"><strong>1. Contestação (${prazoContestacao} d.u.):</strong><br>Início da contagem: ${formatarData(inicioContestacao)}<br>Vencimento final: ${formatarData(dataContestacao, true)}</div>`;
+            
+            let prazoReplica = prazoAutoraEmDobro ? 30 : 15;
+            let inicioReplica = proximoDiaUtil(dataContestacao, comarca);
+            let dataReplica = somarDiasUteis(dataContestacao, prazoReplica, comarca);
+            html += `<div class="etapa"><strong>2. Réplica (${prazoReplica} d.u.):</strong><br>Início da contagem: ${formatarData(inicioReplica)}<br>Vencimento final: ${formatarData(dataReplica, true)}</div>`;
+            
+            if (mostrarProvas) {
+                let inicioProvas = proximoDiaUtil(dataReplica, comarca);
+                let dataProvas = somarDiasUteis(dataReplica, 5, comarca);
+                html += `<div class="etapa"><strong>3. Especificação de Provas (5 d.u.):</strong><br>Início da contagem: ${formatarData(inicioProvas)}<br>Vencimento final: ${formatarData(dataProvas, true)}</div>`;
+            }
+            
+        } else if (cenario === 'instrucao') {
+            let prazoAutora = prazoAutoraEmDobro ? 30 : 15;
+            let inicioAutora = proximoDiaUtil(dataAtual, comarca);
+            let dataAutora = somarDiasUteis(dataAtual, prazoAutora, comarca);
+            html += `<div class="etapa"><strong>1. Memoriais da Autora (${prazoAutora} d.u.):</strong><br>Início da contagem: ${formatarData(inicioAutora)}<br>Vencimento final: ${formatarData(dataAutora, true)}</div>`;
+            
+            let prazoRe = prazoRequeridaEmDobro ? 30 : 15;
+            let inicioRe = proximoDiaUtil(dataAutora, comarca);
+            let dataRe = somarDiasUteis(dataAutora, prazoRe, comarca);
+            html += `<div class="etapa"><strong>2. Memoriais da Requerida (${prazoRe} d.u.):</strong><br>Início da contagem: ${formatarData(inicioRe)}<br>Vencimento final: ${formatarData(dataRe, true)}</div>`;
+            
+            if (temMP) {
+                let inicioMP = proximoDiaUtil(dataRe, comarca);
+                let dataMP = somarDiasUteis(dataRe, 30, comarca);
+                html += `<div class="etapa"><strong>3. Parecer do MP (30 d.u.):</strong><br>Início da contagem: ${formatarData(inicioMP)}<br>Vencimento final: ${formatarData(dataMP, true)}</div>`;
+            }
+        }
+
+        const divResultado = document.getElementById("resultado");
+        divResultado.innerHTML = html;
+        divResultado.style.display = "block";
+    }
+</script>
+
+</body>
+</html>
